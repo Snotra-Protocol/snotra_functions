@@ -7,7 +7,7 @@ env:
   FUNCTION_NAME: test-function
 jobs:
   deploy:
-    name: 'Deploy To Dev'
+    name: 'Deploy To Prod'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -17,13 +17,13 @@ jobs:
       - name: Install Node
         uses: actions/setup-node@v1
         with:
-          node-version: '14.x'
+          node-version: '18.x'
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v3
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-2
+          aws-region: eu-central-1
           role-to-assume: ${{ secrets.AWS_ROLE_TO_ASSUME }}
           role-external-id: ${{ secrets.AWS_ROLE_EXTERNAL_ID }}
           role-duration-seconds: 1200
@@ -31,12 +31,21 @@ jobs:
       - name: Install Dependencies
         run: |
           npm install
-      - name: Package Functions
-        run: |
-          zip -r ../function.zip .
       - name: Deploy To AWS Lambda
         run: |
-          aws lambda update-function-code \
-            --function-name ${FUNCTION_NAME}-dev \
-            --zip-file ../function.zip \
-            --publish
+          files=$(ls)
+          for file in ${files}; do
+            echo "file name: ${file}"
+            extension="${file##*.}"
+            if [ "${extension}" = "js" ] || [ "${extension}" = "ts" ]; then
+              zip -r ../function.zip $file node_modules/ package.json package-lock.json
+              function_name="${file%.*}"
+              echo "deploying function #{function_name}"
+              aws lambda update-function-code \
+                --function-name ${function_name} \
+                --zip-file fileb://../function.zip \
+                --publish
+            else
+              echo "file extension is not in the list, skipping deployment..."
+            fi
+          done
